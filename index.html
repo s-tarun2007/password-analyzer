@@ -28,11 +28,17 @@
     <style>
       @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;500;600;700&display=swap');
       
+      html {
+        scroll-behavior: smooth;
+        height: 100%;
+      }
+
       body {
         font-family: 'Fira Code', monospace;
         background-color: #020617; /* slate-950 */
         color: #22c55e; /* green-500 */
         overflow-x: hidden;
+        min-height: 100%;
       }
 
       /* Custom Scrollbar for Cyber feel */
@@ -69,6 +75,9 @@
         z-index: 50;
         pointer-events: none;
         opacity: 0.3;
+        /* Hardware acceleration to prevent mobile lag */
+        transform: translateZ(0);
+        will-change: opacity;
       }
 
       .glow-text {

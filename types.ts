@@ -1,4 +1,5 @@
 
+
 export interface AIAnalysisResult {
   score: number;
   crackTime: string;
@@ -34,6 +35,7 @@ export interface SavedPasswordEntry {
   savedAt: string;
   lastAccessedAt?: string;
   score?: number;
+  description?: string;
 }
 
 export enum AnalysisState {

@@ -9,6 +9,11 @@ interface TacticalBuilderProps {
   onCancel: () => void;
 }
 
+// Utility to escape regex special characters
+function escapeRegExp(string: string) {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); 
+}
+
 const TacticalBuilder: React.FC<TacticalBuilderProps> = ({ initialPassword, suggestions, onCommit, onCancel }) => {
   const [password, setPassword] = useState(initialPassword);
   const [previewPassword, setPreviewPassword] = useState<string | null>(null);
@@ -55,7 +60,8 @@ const TacticalBuilder: React.FC<TacticalBuilderProps> = ({ initialPassword, sugg
 
   const applySubstitution = (original: string, replacement: string) => {
     // Replace all occurrences case-insensitive
-    const regex = new RegExp(original, 'gi');
+    const escapedOriginal = escapeRegExp(original);
+    const regex = new RegExp(escapedOriginal, 'gi');
     const newPassword = password.replace(regex, replacement);
     setPassword(newPassword);
     setPreviewPassword(null); // Clear preview on commit
@@ -70,13 +76,20 @@ const TacticalBuilder: React.FC<TacticalBuilderProps> = ({ initialPassword, sugg
   };
 
   const handlePreviewSub = (original: string, replacement: string) => {
-    const regex = new RegExp(original, 'gi');
+    const escapedOriginal = escapeRegExp(original);
+    const regex = new RegExp(escapedOriginal, 'gi');
     const preview = password.replace(regex, replacement);
     setPreviewPassword(preview);
   };
 
   const clearPreview = () => {
     setPreviewPassword(null);
+  };
+
+  const checkApplicability = (original: string) => {
+      const escapedOriginal = escapeRegExp(original);
+      const regex = new RegExp(escapedOriginal, 'i'); // Case insensitive check
+      return regex.test(password);
   };
 
   return (
@@ -128,7 +141,7 @@ const TacticalBuilder: React.FC<TacticalBuilderProps> = ({ initialPassword, sugg
                 onMouseEnter={() => handlePreviewInsert(sym)}
                 onMouseLeave={clearPreview}
                 onClick={() => insertAtCursor(sym)}
-                className="w-8 h-8 flex items-center justify-center bg-black border border-amber-500/40 text-amber-400 hover:bg-amber-500 hover:text-black hover:border-cyan-400 hover:shadow-[0_0_15px_rgba(34,211,238,0.6)] transition-all duration-150 font-mono font-bold rounded-md"
+                className="relative w-8 h-8 flex items-center justify-center bg-black border border-amber-500/40 text-amber-400 hover:bg-amber-500 hover:text-black hover:border-cyan-400 hover:shadow-[0_0_15px_rgba(34,211,238,0.6)] hover:scale-110 hover:z-10 transition-all duration-200 font-mono font-bold rounded-md"
                 title="Hover to preview, Click to insert"
               >
                 {sym}
@@ -147,7 +160,7 @@ const TacticalBuilder: React.FC<TacticalBuilderProps> = ({ initialPassword, sugg
                 onMouseEnter={() => handlePreviewInsert(suffix)}
                 onMouseLeave={clearPreview}
                 onClick={() => insertAtCursor(suffix)}
-                className="px-2 py-1 bg-black border border-amber-500/40 text-amber-400 text-xs hover:bg-amber-500 hover:text-black hover:border-cyan-400 hover:shadow-[0_0_15px_rgba(34,211,238,0.6)] transition-all duration-150 font-mono rounded-md"
+                className="relative px-2 py-1 bg-black border border-amber-500/40 text-amber-400 text-xs hover:bg-amber-500 hover:text-black hover:border-cyan-400 hover:shadow-[0_0_15px_rgba(34,211,238,0.6)] hover:scale-105 hover:z-10 transition-all duration-200 font-mono rounded-md"
               >
                 {suffix}
               </button>
@@ -159,19 +172,28 @@ const TacticalBuilder: React.FC<TacticalBuilderProps> = ({ initialPassword, sugg
         <div className="bg-amber-900/10 p-3 border border-amber-500/20 rounded-xl">
           <h4 className="text-[10px] text-amber-500 uppercase mb-3 font-bold">Mutate Chars</h4>
           <div className="flex flex-col gap-2">
-            {suggestions.leetspeak.map((item, idx) => (
-              <button
-                key={idx}
-                onMouseEnter={() => handlePreviewSub(item.original, item.replacement)}
-                onMouseLeave={clearPreview}
-                onClick={() => applySubstitution(item.original, item.replacement)}
-                className="flex items-center justify-between px-3 py-1 bg-black border border-amber-500/40 text-amber-400 text-xs hover:bg-amber-500 hover:text-black hover:border-cyan-400 hover:shadow-[0_0_15px_rgba(34,211,238,0.6)] transition-all duration-150 font-mono group rounded-md"
-              >
-                <span>Swap <strong className="text-white group-hover:text-black">{item.original}</strong></span>
-                <span className="opacity-50">➔</span>
-                <strong className="text-white group-hover:text-black">{item.replacement}</strong>
-              </button>
-            ))}
+            {suggestions.leetspeak.map((item, idx) => {
+              const isApplicable = checkApplicability(item.original);
+              return (
+                <button
+                  key={idx}
+                  onMouseEnter={() => isApplicable && handlePreviewSub(item.original, item.replacement)}
+                  onMouseLeave={clearPreview}
+                  onClick={() => isApplicable && applySubstitution(item.original, item.replacement)}
+                  disabled={!isApplicable}
+                  className={`flex items-center justify-between px-3 py-1 bg-black border text-xs transition-all duration-150 font-mono group rounded-md ${
+                    isApplicable 
+                      ? 'border-amber-500/40 text-amber-400 hover:bg-amber-500 hover:text-black hover:border-cyan-400 hover:shadow-[0_0_15px_rgba(34,211,238,0.6)] cursor-pointer' 
+                      : 'border-gray-800 text-gray-600 cursor-not-allowed opacity-50'
+                  }`}
+                  title={isApplicable ? "Click to swap all occurrences" : "Character not found in password"}
+                >
+                  <span>Swap <strong className={isApplicable ? "text-white group-hover:text-black" : "text-gray-500"}>{item.original}</strong></span>
+                  <span className="opacity-50">➔</span>
+                  <strong className={isApplicable ? "text-white group-hover:text-black" : "text-gray-500"}>{item.replacement}</strong>
+                </button>
+              );
+            })}
              {suggestions.leetspeak.length === 0 && <span className="text-amber-500/40 text-xs italic">No relevant chars found</span>}
           </div>
         </div>

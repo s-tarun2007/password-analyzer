@@ -11,6 +11,7 @@ interface PasswordVaultProps {
   onDelete: (id: string) => void;
   onRestore?: (id: string) => void;
   onPermanentDelete?: (id: string) => void;
+  onUpdateDescription: (id: string, description: string) => void;
 }
 
 const PasswordVault: React.FC<PasswordVaultProps> = ({ 
@@ -21,15 +22,21 @@ const PasswordVault: React.FC<PasswordVaultProps> = ({
   onCopy, 
   onDelete,
   onRestore,
-  onPermanentDelete
+  onPermanentDelete,
+  onUpdateDescription
 }) => {
   const [isDeleteMode, setIsDeleteMode] = useState(false);
   const [showRecycleBin, setShowRecycleBin] = useState(false);
+  
+  // Description editing state
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState("");
 
   // Reset states when opening
   useEffect(() => {
     if (isOpen) {
         setShowRecycleBin(false);
+        setEditingId(null);
     }
   }, [isOpen]);
 
@@ -46,21 +53,15 @@ const PasswordVault: React.FC<PasswordVaultProps> = ({
   const activeList = isRecycleView ? deletedPasswords : savedPasswords;
   
   // Theme Logic
-  // Default Safe: Green
-  // Delete Mode (Main List): Red
-  // Recycle Bin (Recovery Mode): Cyan/Teal/Green (User requested "turn into green colour")
-  
   let borderColor = 'border-green-500/30';
   let headerBg = 'bg-green-900/5';
   let titleColor = 'text-green-500';
   
   if (isRecycleView) {
-      // Recycle Bin (Green/Recovery)
       borderColor = 'border-emerald-500/50';
       headerBg = 'bg-emerald-900/20';
       titleColor = 'text-emerald-400';
   } else if (isDeleteMode) {
-      // Delete Mode (Red/Danger)
       borderColor = 'border-red-500/30';
       headerBg = 'bg-red-900/10';
       titleColor = 'text-red-500';
@@ -70,6 +71,26 @@ const PasswordVault: React.FC<PasswordVaultProps> = ({
       // Only allow toggling if we are in delete mode OR we are already in recycle bin
       if (isDeleteMode || showRecycleBin) {
           setShowRecycleBin(!showRecycleBin);
+      }
+  };
+
+  const startEditing = (entry: SavedPasswordEntry) => {
+      if (isDeleteMode || isRecycleView) return;
+      setEditingId(entry.id);
+      setEditValue(entry.description || "");
+  };
+
+  const submitEdit = (id: string) => {
+      onUpdateDescription(id, editValue);
+      setEditingId(null);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent, id: string) => {
+      if (e.key === 'Enter') {
+          submitEdit(id);
+      } else if (e.key === 'Escape') {
+          setEditingId(null);
+          setEditValue(""); // Discard changes
       }
   };
 
@@ -198,6 +219,39 @@ const PasswordVault: React.FC<PasswordVaultProps> = ({
                         </div>
                     )}
                   </div>
+
+                  {/* Description Display / Edit */}
+                  {editingId === entry.id ? (
+                      <input 
+                          type="text"
+                          value={editValue}
+                          onChange={(e) => setEditValue(e.target.value)}
+                          onBlur={() => submitEdit(entry.id)}
+                          onKeyDown={(e) => handleKeyDown(e, entry.id)}
+                          className="w-full bg-black border border-green-500 rounded-md px-3 py-2 text-xs text-white font-mono focus:outline-none focus:ring-1 focus:ring-green-400 mt-2 placeholder-green-900/50"
+                          autoFocus
+                          placeholder="Enter description..."
+                      />
+                  ) : (
+                      <div 
+                          onClick={() => startEditing(entry)}
+                          className={`text-xs mt-2 font-mono transition-all flex items-center justify-between group/desc select-none rounded-md px-2 py-1.5 ${
+                              isDeleteMode || isRecycleView 
+                                ? '' 
+                                : `cursor-pointer ${entry.description ? 'hover:bg-white/5' : 'border border-dashed border-gray-800 hover:border-green-500/50 hover:text-green-400'}`
+                          } ${entry.description ? 'text-gray-400' : 'text-gray-600'}`}
+                          title={isDeleteMode || isRecycleView ? undefined : "Click to edit description"}
+                      >
+                         <span className={!entry.description ? "italic opacity-70" : ""}>
+                            {entry.description || (isDeleteMode || isRecycleView ? "" : "+ Add description...")}
+                         </span>
+                         {!isDeleteMode && !isRecycleView && (
+                             <span className={`text-[10px] text-green-500 ml-2 ${entry.description ? 'opacity-0 group-hover/desc:opacity-100' : 'opacity-100'}`}>
+                                ✎
+                             </span>
+                         )}
+                      </div>
+                  )}
                   
                   <div className="flex items-center gap-3 my-1">
                      <span className={`${

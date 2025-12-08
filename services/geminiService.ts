@@ -145,13 +145,14 @@ export const boostPassword = async (password: string): Promise<BoostResult> => {
 };
 
 export const getBoostSuggestions = async (password: string): Promise<BoostSuggestions> => {
+  // Optimization: Shortened prompt tokens for faster inference time
   const prompt = `
-    Analyze this password: "${password}".
-    Provide a set of "building blocks" that a user could manually add to this password to strengthen it.
+    Analyze password: "${password}".
+    Generate JSON strengthening components relevant to THIS password.
     
-    1. Suggest 4-5 relevant special characters that fit well (e.g. if password is 'money', suggest '$').
-    2. Suggest 3-4 short numeric or text suffixes/prefixes that increase entropy (e.g. year, random number, or related word).
-    3. Suggest 3-4 simple "leet speak" character substitutions relevant to the characters IN the password (e.g. if 'a' exists, suggest replacing with '@').
+    1. "suggestedSymbols": 5 thematic symbols (e.g. 'money' -> '$').
+    2. "suggestedSuffixes": 4 entropy suffixes (e.g. year, l33t).
+    3. "leetspeak": Substitutions ONLY for chars EXISTING in "${password}".
     
     Return JSON.
   `;
@@ -165,8 +166,8 @@ export const getBoostSuggestions = async (password: string): Promise<BoostSugges
         responseSchema: {
           type: Type.OBJECT,
           properties: {
-            suggestedSymbols: { type: Type.ARRAY, items: { type: Type.STRING }, description: "List of symbols like !, @, #, $" },
-            suggestedSuffixes: { type: Type.ARRAY, items: { type: Type.STRING }, description: "List of strings to append like 99, 2024, #secure" },
+            suggestedSymbols: { type: Type.ARRAY, items: { type: Type.STRING } },
+            suggestedSuffixes: { type: Type.ARRAY, items: { type: Type.STRING } },
             leetspeak: { 
               type: Type.ARRAY, 
               items: { 
@@ -175,8 +176,7 @@ export const getBoostSuggestions = async (password: string): Promise<BoostSugges
                   original: { type: Type.STRING },
                   replacement: { type: Type.STRING }
                 }
-              },
-              description: "List of substitution pairs" 
+              }
             },
           }
         }
