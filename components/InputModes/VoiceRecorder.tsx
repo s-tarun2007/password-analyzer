@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useState } from 'react';
 import CyberButton from '../CyberButton';
 
@@ -16,14 +15,34 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ onRecordingComplete }) =>
   const analyserRef = useRef<AnalyserNode | null>(null);
   const dataArrayRef = useRef<Uint8Array | null>(null);
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const animationIdRef = useRef<number>(0);
   
   // Hash Accumulator
   const audioFingerprintRef = useRef<number[]>([]);
 
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      stopTracks();
+      if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+        audioContextRef.current.close();
+      }
+      cancelAnimationFrame(animationIdRef.current);
+    };
+  }, []);
+
+  const stopTracks = () => {
+    if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+        streamRef.current = null;
+    }
+  };
+
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
       
       const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
       const audioCtx = new AudioContextClass();
@@ -48,7 +67,7 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ onRecordingComplete }) =>
 
       // Record for 3 seconds then stop
       setTimeout(() => {
-         stopRecording(stream);
+         stopRecording();
       }, 3000);
 
     } catch (err) {
@@ -57,12 +76,11 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ onRecordingComplete }) =>
     }
   };
 
-  const stopRecording = (stream: MediaStream) => {
+  const stopRecording = () => {
     setIsRecording(false);
     cancelAnimationFrame(animationIdRef.current);
     
-    // Stop all tracks to release microphone
-    stream.getTracks().forEach(track => track.stop());
+    stopTracks();
     
     if (audioContextRef.current) {
         audioContextRef.current.close();
@@ -83,7 +101,7 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ onRecordingComplete }) =>
         const complexHash = `VOICE-AUTH-${rawHex}-${fingerprint.length}Smp-HZ${fingerprint[10] || 0}`;
         onRecordingComplete(complexHash);
     } else {
-        // Fallback if no audio detected
+        // Fallback if no audio detected or immediate error
         const randomFreq = Math.floor(Math.random() * 9000) + 1000;
         onRecordingComplete(`VOICE-AUTH-SILENCE-${randomFreq}`);
     }

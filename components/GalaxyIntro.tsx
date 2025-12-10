@@ -174,34 +174,103 @@ const GalaxyIntro: React.FC<GalaxyIntroProps> = ({ onComplete }) => {
 
         {/* Start Button */}
         <div className={`absolute inset-0 z-30 flex items-center justify-center transition-opacity duration-500 ${phase === 'IDLE' ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
+             
+             <style>{`
+                /* --- Custom Variables --- */
+                :root {
+                  --black-base: rgba(10, 10, 10, 0.3);
+                  --black-dark: #000000;
+                  --glass-highlight: rgba(255, 255, 255, 0.15);
+                  --border-color: rgba(255, 255, 255, 0.05);
+                  --transition-speed: 0.3s;
+                }
+
+                /* --- Liquid Glass Button Styling --- */
+                .liquid-glass-button {
+                  position: relative;
+                  overflow: hidden;
+                  padding: 1rem 2.5rem;
+                  border: 1px solid var(--border-color);
+                  border-radius: 12px;
+                  background-color: var(--black-base);
+                  backdrop-filter: blur(12px); 
+                  -webkit-backdrop-filter: blur(12px);
+                  box-shadow: 
+                    0 4px 30px rgba(0, 0, 0, 0.5), 
+                    inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+                  color: #fff;
+                  font-size: 1.1rem;
+                  font-weight: 600;
+                  text-decoration: none;
+                  cursor: pointer;
+                  z-index: 1;
+                  transition: 
+                    box-shadow var(--transition-speed) ease,
+                    transform var(--transition-speed) ease;
+                  display: inline-flex;
+                  align-items: center;
+                  gap: 12px;
+                }
+
+                .liquid-glass-button span, .liquid-glass-button svg {
+                  position: relative;
+                  z-index: 10;
+                }
+
+                /* --- The 'Liquid' Highlight Effect --- */
+                .liquid-glass-button::before {
+                  content: '';
+                  position: absolute;
+                  top: 0;
+                  left: 0;
+                  width: 200%;
+                  height: 100%;
+                  background: linear-gradient(
+                    90deg, 
+                    transparent, 
+                    var(--glass-highlight), 
+                    transparent
+                  );
+                  transform: translateX(-100%) skewX(-30deg);
+                  transition: transform 0.45s ease-in-out;
+                  z-index: 5;
+                }
+
+                /* --- Hover State --- */
+                .liquid-glass-button:hover {
+                  transform: translateY(-2px) scale(1.05);
+                  box-shadow: 
+                    0 8px 40px rgba(0, 0, 0, 0.8), 
+                    0 0 15px rgba(255, 255, 255, 0.05), 
+                    inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+                }
+
+                .liquid-glass-button:hover::before {
+                  transform: translateX(0%) skewX(-30deg);
+                }
+
+                /* --- Active State --- */
+                .liquid-glass-button:active {
+                  transform: translateY(0) scale(1);
+                  box-shadow: 
+                    0 2px 20px rgba(0, 0, 0, 0.5),
+                    inset 0 0 5px rgba(255, 255, 255, 0.1);
+                }
+             `}</style>
+
              <button 
                 onClick={handleStart}
-                className="group relative px-12 py-5 bg-transparent overflow-hidden rounded-full transition-all duration-300 hover:shadow-[0_0_50px_rgba(59,130,246,0.5)] active:scale-95"
+                className="liquid-glass-button"
              >
-                <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-blue-600 via-violet-600 to-blue-600 opacity-80 group-hover:opacity-100 transition-opacity animate-gradient-x"></div>
-                <div className="absolute inset-0 rounded-full border border-blue-400/50"></div>
-                <span className="relative z-10 text-white font-bold text-xl uppercase tracking-[0.2em] drop-shadow-md group-hover:tracking-[0.25em] transition-all">
-                    Let's Start
-                </span>
+                <svg viewBox="0 0 24 24" className="w-6 h-6 fill-white drop-shadow-[0_2px_4px_rgba(0,0,0,1)]" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M8 5v14l11-7z" />
+                </svg>
+                <span className="drop-shadow-[0_2px_4px_rgba(0,0,0,1)]">LET'S START</span>
              </button>
         </div>
 
-        {/* The Flash Effect - Center Line */}
-        <div className={`absolute top-1/2 left-0 w-full h-[2px] bg-cyan-200 z-40 -translate-y-1/2 shadow-[0_0_100px_60px_rgba(255,255,255,0.9)] transition-all duration-200 ${phase === 'FLASH' ? 'opacity-100 scale-x-100' : 'opacity-0 scale-x-110'}`}></div>
-        
-        {/* Full Screen Flash Overlay */}
-        <div className={`absolute inset-0 bg-white z-40 mix-blend-overlay transition-opacity duration-300 ${phase === 'FLASH' ? 'opacity-60' : 'opacity-0'}`}></div>
-
-        <style>{`
-            @keyframes gradient-x {
-                0%, 100% { background-position: 0% 50%; }
-                50% { background-position: 100% 50%; }
-            }
-            .animate-gradient-x {
-                background-size: 200% 200%;
-                animation: gradient-x 3s ease infinite;
-            }
-        `}</style>
+        {/* Flash Effect */}
+        <div className={`absolute inset-0 bg-white z-40 pointer-events-none transition-opacity duration-150 ${phase === 'FLASH' ? 'opacity-100' : 'opacity-0'}`}></div>
     </div>
   );
 };

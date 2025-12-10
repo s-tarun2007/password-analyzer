@@ -10,17 +10,21 @@ const RetinaScanner: React.FC<RetinaScannerProps> = ({ onScanComplete }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null); // Hidden canvas for processing
+  const [cameraActive, setCameraActive] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Cleanup on unmount
   useEffect(() => {
-    startCamera();
-    return () => stopCamera();
+    return () => {
+      stopCamera();
+    };
   }, []);
 
   const startCamera = async () => {
     try {
+      setCameraActive(true);
       // Prefer front-facing camera for mobile
       const mediaStream = await navigator.mediaDevices.getUserMedia({ 
           video: { facingMode: "user" } 
@@ -34,7 +38,8 @@ const RetinaScanner: React.FC<RetinaScannerProps> = ({ onScanComplete }) => {
       setIsComplete(false);
     } catch (err) {
       console.error(err);
-      setError("CAMERA ACCESS DENIED. ENABLE PERMISSIONS.");
+      setError("CAMERA ACCESS DENIED. CHECK PERMISSIONS.");
+      setCameraActive(false);
     }
   };
 
@@ -92,12 +97,13 @@ const RetinaScanner: React.FC<RetinaScannerProps> = ({ onScanComplete }) => {
     }, 2500);
   };
 
+  // Error State
   if (error) {
     return (
       <div className="h-64 bg-black border border-red-500/50 flex flex-col items-center justify-center text-red-500 p-4 rounded-xl">
         <span className="text-4xl mb-2">⚠️</span>
-        <p className="font-mono text-center text-sm">{error}</p>
-        <CyberButton onClick={startCamera} variant="danger" className="mt-4">RETRY CAMERA</CyberButton>
+        <p className="font-mono text-center text-sm mb-4">{error}</p>
+        <CyberButton onClick={startCamera} variant="danger">RETRY PERMISSION</CyberButton>
       </div>
     );
   }
@@ -116,8 +122,35 @@ const RetinaScanner: React.FC<RetinaScannerProps> = ({ onScanComplete }) => {
     );
   }
 
+  // Initial Standby State (Before Permission Request)
+  if (!cameraActive) {
+      return (
+        <div className="h-96 w-full bg-black rounded-xl overflow-hidden border border-green-500/30 flex flex-col items-center justify-center relative">
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-green-900/10 via-black to-black"></div>
+            
+            {/* HUD Elements */}
+            <div className="absolute top-4 left-4 w-4 h-4 border-t border-l border-green-500/50"></div>
+            <div className="absolute top-4 right-4 w-4 h-4 border-t border-r border-green-500/50"></div>
+            <div className="absolute bottom-4 left-4 w-4 h-4 border-b border-l border-green-500/50"></div>
+            <div className="absolute bottom-4 right-4 w-4 h-4 border-b border-r border-green-500/50"></div>
+
+            <div className="z-10 text-center space-y-4">
+                <div className="text-6xl grayscale opacity-30">📷</div>
+                <h3 className="text-green-500 font-bold tracking-widest uppercase">Optical Sensor Standby</h3>
+                <p className="text-green-900 text-xs font-mono max-w-xs mx-auto">
+                    Initialize camera uplink to proceed with retinal identification. Permission required.
+                </p>
+                <CyberButton onClick={startCamera} className="mt-4 shadow-[0_0_15px_rgba(34,197,94,0.2)]">
+                    INITIALIZE SENSOR
+                </CyberButton>
+            </div>
+        </div>
+      );
+  }
+
+  // Active Camera State
   return (
-    <div className="relative h-96 w-full bg-black rounded-xl overflow-hidden border-2 border-green-500/30 group">
+    <div className="relative h-96 w-full bg-black rounded-xl overflow-hidden border-2 border-green-500/30 group animate-in fade-in duration-700">
       {/* Hidden Canvas for processing */}
       <canvas ref={canvasRef} className="hidden" />
 
