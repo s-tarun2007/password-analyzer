@@ -30,15 +30,17 @@ const GalaxyIntro: React.FC<GalaxyIntroProps> = ({ onComplete }) => {
     window.addEventListener('resize', resize);
     resize();
 
-    // Initialize Particles
-    const particleCount = 2500; // Increased count slightly for better line density
+    // PERFORMANCE OPTIMIZATION: Reduce particles on mobile to prevent lag
+    const isMobile = window.innerWidth < 768;
+    const particleCount = isMobile ? 600 : 2000; 
+    
     const particles = [];
     const colors = ['#8b5cf6', '#6366f1', '#a855f7', '#3b82f6', '#ffffff']; 
 
     for (let i = 0; i < particleCount; i++) {
         const theta = Math.random() * 2 * Math.PI;
         const phi = Math.acos((Math.random() * 2) - 1);
-        const r = 250 + Math.random() * 100; // Slightly larger radius
+        const r = 200 + Math.random() * 150; // Wider distribution for less "hard shell" look
         
         particles.push({
             // Spherical coords
@@ -51,12 +53,12 @@ const GalaxyIntro: React.FC<GalaxyIntroProps> = ({ onComplete }) => {
             x: 0, y: 0, z: 0,
             
             // Attributes
-            size: Math.random() * 1.2 + 0.3, // Smaller variance for sharper look
+            size: Math.random() * 1.5 + 0.5, 
             color: colors[Math.floor(Math.random() * colors.length)],
-            speedOffset: Math.random() * 0.005, // Reduced variance for uniform flow
+            speedOffset: Math.random() * 0.002, 
             
             // Collapse targets
-            targetX: (Math.random() - 0.5) * window.innerWidth * 0.9, 
+            targetX: (Math.random() - 0.5) * window.innerWidth * 0.8, 
             targetY: 0, 
         });
     }
@@ -65,7 +67,7 @@ const GalaxyIntro: React.FC<GalaxyIntroProps> = ({ onComplete }) => {
     // Animation Loop
     const animate = () => {
       if (!ctx || !canvas) return;
-      animState.current.time += 0.008; // Slower time progression
+      animState.current.time += 0.01; 
       
       const width = canvas.width;
       const height = canvas.height;
@@ -81,13 +83,13 @@ const GalaxyIntro: React.FC<GalaxyIntroProps> = ({ onComplete }) => {
       animState.current.particles.forEach(p => {
         
         if (currentPhase === 'IDLE') {
-            // Slower Rotation
-            p.theta += 0.0015 + p.speedOffset;
+            // Rotation
+            p.theta += 0.002 + p.speedOffset;
             
-            // Slower, smoother Sine Wave Fluidity
-            // Frequency reduced (p.phi * 3 instead of 5)
-            // Time multiplier reduced (time * 1.5 instead of 2)
-            const fluidR = p.originalR + Math.sin(animState.current.time * 1.5 + p.phi * 3) * 12;
+            // MORPHING LOGIC:
+            const fluidR = p.originalR 
+                + Math.sin(animState.current.time * 2 + p.phi * 4) * 50 
+                + Math.cos(animState.current.time * 1.5 + p.theta * 2) * 30;
             
             p.x = fluidR * Math.sin(p.phi) * Math.cos(p.theta);
             p.y = fluidR * Math.sin(p.phi) * Math.sin(p.theta);
@@ -95,16 +97,12 @@ const GalaxyIntro: React.FC<GalaxyIntroProps> = ({ onComplete }) => {
         
         } else if (currentPhase === 'COLLAPSING') {
             // Collapse logic
+            const fluidR = p.originalR * 0.5; // Shrink slightly
             
-            // Calculate "current" spherical position to maintain flow entering collapse
-            const sphereX = p.r * Math.sin(p.phi) * Math.cos(p.theta + 0.05); 
+            const ease = 0.08; // Snappier collapse
             
-            // Slower easing for smoother, less blurry movement
-            const ease = 0.04; 
-            
-            // Tighter line target (less Y jitter)
             const targetX = p.targetX; 
-            const targetY = 0 + (Math.sin(p.theta * 20) * 0.5); // Very tight center line
+            const targetY = 0 + (Math.sin(p.theta * 10) * 2); 
             const targetZ = 0;
 
             p.x += (targetX - p.x) * ease;
@@ -123,23 +121,13 @@ const GalaxyIntro: React.FC<GalaxyIntroProps> = ({ onComplete }) => {
 
         // Draw
         if (scale > 0 && currentPhase !== 'FLASH') {
-            ctx.globalAlpha = 1;
+            ctx.globalAlpha = currentPhase === 'IDLE' ? 0.8 : 1;
             ctx.fillStyle = p.color;
             ctx.beginPath();
-            // Removed size multiplier to keep it crisp
             ctx.arc(x2d, y2d, p.size * scale, 0, Math.PI * 2);
             ctx.fill();
         }
       });
-
-      // Check for collapse completion
-      if (currentPhase === 'COLLAPSING') {
-          const firstP = animState.current.particles[0];
-          // Check if y is very close to 0
-          if (Math.abs(firstP.y) < 1.0) {
-             setPhase('FLASH');
-          }
-      }
 
       animState.current.animationFrameId = requestAnimationFrame(animate);
     };
@@ -166,6 +154,10 @@ const GalaxyIntro: React.FC<GalaxyIntroProps> = ({ onComplete }) => {
 
   const handleStart = () => {
     setPhase('COLLAPSING');
+    // Force transition after sufficient time for collapse animation
+    setTimeout(() => {
+        setPhase('FLASH');
+    }, 1200);
   };
 
   return (

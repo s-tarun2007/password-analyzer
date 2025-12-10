@@ -50,10 +50,10 @@ const ResultsDashboard: React.FC<ResultsDashboardProps> = ({
         
         <h3 className="text-green-400 uppercase tracking-widest text-sm mb-4 font-bold">Risk Assessment Score</h3>
         
-        {/* Fixed: Recharts width error. Ensure parent has strict dimensions and render conditional. */}
-        <div className="w-full h-48 relative min-w-[200px] min-h-[192px]">
+        {/* Fixed: Recharts width error. Added explicit min dimensions to ResponsiveContainer */}
+        <div className="w-full h-56 relative min-w-[200px] min-h-[220px]">
            {chartData && (
-             <ResponsiveContainer width="100%" height="100%">
+             <ResponsiveContainer width="100%" height="100%" minWidth={100} minHeight={100}>
                 <RadialBarChart 
                 innerRadius="80%" 
                 outerRadius="100%" 
@@ -71,14 +71,14 @@ const ResultsDashboard: React.FC<ResultsDashboardProps> = ({
                 </RadialBarChart>
             </ResponsiveContainer>
            )}
-          <div className="absolute inset-x-0 bottom-0 text-center -mb-2">
+          <div className="absolute inset-x-0 bottom-4 text-center">
             <span className={`text-xl font-bold ${result.score < 50 ? 'text-red-500' : 'text-green-500'}`}>
               {result.score < 50 ? 'VULNERABLE' : 'SECURE'}
             </span>
           </div>
         </div>
 
-        <div className="w-full mt-6 grid grid-cols-2 gap-4 text-center mb-6">
+        <div className="w-full mt-2 grid grid-cols-2 gap-4 text-center mb-6">
             <div className="p-3 border border-green-500/10 bg-black/40 rounded-lg">
                 <p className="text-xs text-gray-500 uppercase font-semibold">Crack Time</p>
                 <p className="text-green-300 font-bold text-sm">{result.crackTime}</p>

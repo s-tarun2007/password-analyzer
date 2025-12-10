@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { SavedPasswordEntry } from '../types';
+
+import React, { useState, useEffect, useRef } from 'react';
+import { SavedPasswordEntry, InputModeType } from '../types';
 import CyberButton from './CyberButton';
+import FirewallGuard from './FirewallGuard';
 
 interface PasswordVaultProps {
   isOpen: boolean;
@@ -12,7 +14,22 @@ interface PasswordVaultProps {
   onRestore?: (id: string) => void;
   onPermanentDelete?: (id: string) => void;
   onUpdateDescription: (id: string, description: string) => void;
+  onUpdateExpiry?: (id: string, date: string) => void;
 }
+
+// Helper component to handle focus without scrolling the page
+const AutoFocusInput: React.FC<React.InputHTMLAttributes<HTMLInputElement>> = (props) => {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    // Focus the input on mount, but prevent the browser from scrolling it into view
+    if (inputRef.current) {
+      inputRef.current.focus({ preventScroll: true });
+    }
+  }, []);
+
+  return <input ref={inputRef} {...props} />;
+};
 
 const PasswordVault: React.FC<PasswordVaultProps> = ({ 
   isOpen, 
@@ -23,20 +40,28 @@ const PasswordVault: React.FC<PasswordVaultProps> = ({
   onDelete,
   onRestore,
   onPermanentDelete,
-  onUpdateDescription
+  onUpdateDescription,
+  onUpdateExpiry
 }) => {
   const [isDeleteMode, setIsDeleteMode] = useState(false);
   const [showRecycleBin, setShowRecycleBin] = useState(false);
+  const [filterType, setFilterType] = useState<InputModeType | 'all'>('all');
   
   // Description editing state
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
+
+  // Expiration editing state
+  const [editingExpiryId, setEditingExpiryId] = useState<string | null>(null);
+  const [expiryValue, setExpiryValue] = useState("");
 
   // Reset states when opening
   useEffect(() => {
     if (isOpen) {
         setShowRecycleBin(false);
         setEditingId(null);
+        setEditingExpiryId(null);
+        setFilterType('all');
     }
   }, [isOpen]);
 
@@ -48,9 +73,40 @@ const PasswordVault: React.FC<PasswordVaultProps> = ({
     return 'text-green-500 border-green-500/50 bg-green-900/20';
   };
 
+  const getExpiryStatus = (dateStr?: string) => {
+    if (!dateStr) return { status: 'none', label: 'SET EXPIRY', color: 'text-gray-600', border: 'border-transparent' };
+    
+    const expiry = new Date(dateStr);
+    const now = new Date();
+    // Reset times to midnight for fair comparison
+    expiry.setHours(23, 59, 59, 999);
+    now.setHours(0, 0, 0, 0);
+    
+    const diffTime = expiry.getTime() - now.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffDays < 0) return { status: 'expired', label: 'EXPIRED', color: 'text-red-500 font-bold', border: 'border-red-500' };
+    if (diffDays <= 7) return { status: 'soon', label: `EXPIRING: ${diffDays} DAYS`, color: 'text-amber-500 font-bold', border: 'border-amber-500' };
+    return { status: 'ok', label: `VALID UNTIL: ${dateStr}`, color: 'text-green-500/60', border: 'border-green-500/10' };
+  };
+
+  const getTypeIcon = (type: InputModeType) => {
+      switch(type) {
+          case 'voice': return '🎙';
+          case 'retina': return '👁';
+          case 'bio': return '👆';
+          default: return '⌨';
+      }
+  };
+
   // Determine active list and theme based on Recycle Bin state
   const isRecycleView = showRecycleBin;
-  const activeList = isRecycleView ? deletedPasswords : savedPasswords;
+  let activeList = isRecycleView ? deletedPasswords : savedPasswords;
+  
+  // Apply Filter
+  if (filterType !== 'all') {
+      activeList = activeList.filter(p => p.type === filterType);
+  }
   
   // Theme Logic
   let borderColor = 'border-green-500/30';
@@ -68,7 +124,6 @@ const PasswordVault: React.FC<PasswordVaultProps> = ({
   }
 
   const handleToggleRecycleBin = () => {
-      // Only allow toggling if we are in delete mode OR we are already in recycle bin
       if (isDeleteMode || showRecycleBin) {
           setShowRecycleBin(!showRecycleBin);
       }
@@ -85,12 +140,32 @@ const PasswordVault: React.FC<PasswordVaultProps> = ({
       setEditingId(null);
   };
 
+  const startEditingExpiry = (entry: SavedPasswordEntry) => {
+    if (isDeleteMode || isRecycleView) return;
+    setEditingExpiryId(entry.id);
+    // Use existing expiry or default to 90 days from now if not set
+    if (entry.expiresAt) {
+        setExpiryValue(entry.expiresAt);
+    } else {
+        const d = new Date();
+        d.setDate(d.getDate() + 90);
+        setExpiryValue(d.toISOString().split('T')[0]);
+    }
+  };
+
+  const submitExpiry = (id: string) => {
+    if (onUpdateExpiry && expiryValue) {
+        onUpdateExpiry(id, expiryValue);
+    }
+    setEditingExpiryId(null);
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent, id: string) => {
       if (e.key === 'Enter') {
           submitEdit(id);
       } else if (e.key === 'Escape') {
           setEditingId(null);
-          setEditValue(""); // Discard changes
+          setEditValue(""); 
       }
   };
 
@@ -128,7 +203,7 @@ const PasswordVault: React.FC<PasswordVaultProps> = ({
             <p className={`text-[10px] font-mono uppercase mt-1 opacity-70 ${titleColor}`}>
               {isRecycleView 
                 ? 'RESTORATION OF DELETED ASSETS' 
-                : (isDeleteMode ? 'DANGER: DELETION ENABLED' : 'Stored Credentials Database')
+                : (isDeleteMode ? 'DANGER: DELETION ENABLED' : 'AES-256 ENCRYPTED STORAGE')
               }
             </p>
           </div>
@@ -144,8 +219,27 @@ const PasswordVault: React.FC<PasswordVaultProps> = ({
           </button>
         </div>
 
-        {/* Control Bar */}
-        {!isRecycleView && (
+        {/* Filter Tabs */}
+        {!isRecycleView && !isDeleteMode && (
+             <div className="flex w-full border-b border-gray-800 bg-black/60">
+                 {(['all', 'text', 'voice', 'retina', 'bio'] as const).map((type) => (
+                     <button
+                        key={type}
+                        onClick={() => setFilterType(type)}
+                        className={`flex-1 py-2 text-[10px] uppercase font-bold tracking-wider transition-colors border-b-2 ${
+                            filterType === type 
+                                ? 'text-green-400 border-green-500 bg-green-500/10' 
+                                : 'text-gray-600 border-transparent hover:text-gray-400'
+                        }`}
+                     >
+                        {type === 'all' ? 'ALL' : getTypeIcon(type as InputModeType)}
+                     </button>
+                 ))}
+             </div>
+        )}
+
+        {/* Control Bar (Delete Mode) */}
+        {!isRecycleView && filterType === 'all' && (
             <div className="px-6 py-3 border-b border-gray-800 flex items-center justify-between bg-black/40">
             <span className="text-xs uppercase text-gray-500 tracking-wider">Deletion Mode</span>
             <button 
@@ -183,53 +277,64 @@ const PasswordVault: React.FC<PasswordVaultProps> = ({
           {activeList.length === 0 ? (
             <div className="text-center py-10 opacity-50">
               <div className="text-4xl mb-2">
-                  {isRecycleView ? '♻️' : '📂'}
+                  {isRecycleView ? '♻️' : (filterType === 'all' ? '📂' : getTypeIcon(filterType as InputModeType))}
               </div>
               <p className={`text-sm font-mono ${titleColor}`}>
-                  {isRecycleView ? 'BIN EMPTY' : 'VAULT EMPTY'}
+                  {isRecycleView ? 'BIN EMPTY' : 'NO DATA'}
               </p>
               <p className="text-xs text-green-900 mt-2">
-                  {isRecycleView ? 'No deleted items found.' : 'No credentials archived yet.'}
+                  {filterType !== 'all' ? `No ${filterType} records found.` : 'Vault currently empty.'}
               </p>
             </div>
           ) : (
-            activeList.map((entry) => (
+            activeList.map((entry) => {
+              const expiryStatus = getExpiryStatus(entry.expiresAt);
+              
+              return (
               <div 
                 key={entry.id} 
-                className={`bg-black/50 border p-4 group transition-colors relative overflow-hidden rounded-xl ${
+                className={`bg-black/50 border p-4 group transition-all relative overflow-hidden rounded-xl ${
                   isRecycleView
                     ? 'border-emerald-500/20 hover:border-emerald-500/50'
                     : (isDeleteMode 
                         ? 'border-red-500/20 hover:border-red-500/50' 
-                        : 'border-green-500/20 hover:border-green-500/50'
+                        : (expiryStatus.status !== 'ok' && expiryStatus.status !== 'none' 
+                            ? `${expiryStatus.border} box-glow`
+                            : 'border-green-500/20 hover:border-green-500/50'
+                          )
                       )
                 }`}
               >
+                {/* Type Badge */}
+                <div className="absolute top-2 right-2 text-xs opacity-50 font-mono flex items-center gap-1 border border-white/10 rounded px-1.5 py-0.5">
+                    {getTypeIcon(entry.type)} <span className="uppercase text-[8px]">{entry.type}</span>
+                </div>
+
                 <div className="flex flex-col gap-2">
                   <div className="flex justify-between items-start">
                     <div className={`text-[10px] font-mono ${
                         isRecycleView ? 'text-emerald-500/50' : (isDeleteMode ? 'text-red-500/50' : 'text-green-500/50')
                     }`}>
-                      {isRecycleView ? 'DELETED_AT: NOW' : `SAVED: ${entry.savedAt}`}
+                      {isRecycleView ? 'DELETED_AT: NOW' : `ENCRYPTED: ${entry.savedAt}`}
                     </div>
-                    {/* Score Indicator */}
-                    {entry.score !== undefined && (
-                        <div className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${getScoreColorClass(entry.score)}`}>
-                            {entry.score}/100
+                  </div>
+                  
+                   {/* Score Indicator */}
+                   {entry.score !== undefined && (
+                        <div className={`w-fit text-[10px] font-bold px-1.5 py-0.5 rounded border ${getScoreColorClass(entry.score)}`}>
+                            {entry.score}/100 SECURE
                         </div>
                     )}
-                  </div>
 
                   {/* Description Display / Edit */}
                   {editingId === entry.id ? (
-                      <input 
+                      <AutoFocusInput 
                           type="text"
                           value={editValue}
                           onChange={(e) => setEditValue(e.target.value)}
                           onBlur={() => submitEdit(entry.id)}
                           onKeyDown={(e) => handleKeyDown(e, entry.id)}
                           className="w-full bg-black border border-green-500 rounded-md px-3 py-2 text-xs text-white font-mono focus:outline-none focus:ring-1 focus:ring-green-400 mt-2 placeholder-green-900/50"
-                          autoFocus
                           placeholder="Enter description..."
                       />
                   ) : (
@@ -240,7 +345,6 @@ const PasswordVault: React.FC<PasswordVaultProps> = ({
                                 ? '' 
                                 : `cursor-pointer ${entry.description ? 'hover:bg-white/5' : 'border border-dashed border-gray-800 hover:border-green-500/50 hover:text-green-400'}`
                           } ${entry.description ? 'text-gray-400' : 'text-gray-600'}`}
-                          title={isDeleteMode || isRecycleView ? undefined : "Click to edit description"}
                       >
                          <span className={!entry.description ? "italic opacity-70" : ""}>
                             {entry.description || (isDeleteMode || isRecycleView ? "" : "+ Add description...")}
@@ -271,12 +375,44 @@ const PasswordVault: React.FC<PasswordVaultProps> = ({
                      </code>
                   </div>
 
-                  <div className="flex justify-between items-end mt-2">
+                  {/* Expiration Management */}
+                  {!isDeleteMode && !isRecycleView && (
+                      <div className="flex items-center justify-between bg-black/30 p-1.5 rounded border border-white/5 mt-1">
+                          {editingExpiryId === entry.id ? (
+                              <div className="flex items-center gap-2 w-full animate-in fade-in duration-200">
+                                  <AutoFocusInput 
+                                    type="date"
+                                    value={expiryValue}
+                                    onChange={(e) => setExpiryValue(e.target.value)}
+                                    className="bg-black text-white text-[10px] font-mono border border-green-500/50 rounded px-1 w-full focus:outline-none"
+                                  />
+                                  <button onClick={() => submitExpiry(entry.id)} className="text-green-500 text-[10px] hover:text-white">✔</button>
+                                  <button onClick={() => setEditingExpiryId(null)} className="text-red-500 text-[10px] hover:text-white">✕</button>
+                              </div>
+                          ) : (
+                              <>
+                                <div className={`text-[10px] font-mono uppercase flex items-center gap-2 ${expiryStatus.color}`}>
+                                    {expiryStatus.status === 'expired' && <span className="animate-pulse">⚠️</span>}
+                                    {expiryStatus.label}
+                                </div>
+                                <button 
+                                    onClick={() => startEditingExpiry(entry)}
+                                    className="text-[10px] text-gray-600 hover:text-green-400 transition-colors uppercase font-mono border border-transparent hover:border-green-500/30 px-1 rounded"
+                                    title="Change Expiration Date"
+                                >
+                                    📅 SCHEDULE
+                                </button>
+                              </>
+                          )}
+                      </div>
+                  )}
+
+                  <div className="flex justify-between items-end mt-2 pt-2 border-t border-white/5">
                     <div className="text-[10px] text-gray-500 font-mono">
                         {entry.lastAccessedAt ? (
-                            <span className="text-amber-500/70">LAST_ACCESS: {entry.lastAccessedAt}</span>
+                            <span className="text-amber-500/70">DECRYPTED: {entry.lastAccessedAt}</span>
                         ) : (
-                            <span className="opacity-30">NEVER ACCESSED</span>
+                            <span className="opacity-30">ENCRYPTED AT REST</span>
                         )}
                     </div>
                     
@@ -313,7 +449,7 @@ const PasswordVault: React.FC<PasswordVaultProps> = ({
                                     variant="secondary"
                                     className="!py-1 !px-3 text-[10px]"
                                 >
-                                    COPY
+                                    DECRYPT
                                 </CyberButton>
                             )
                         )}
@@ -321,12 +457,12 @@ const PasswordVault: React.FC<PasswordVaultProps> = ({
                   </div>
                 </div>
               </div>
-            ))
+            )})
           )}
         </div>
 
         {/* Footer */}
-        <div className={`p-4 border-t text-center bg-black/80 ${borderColor}`}>
+        <div className={`p-4 border-t bg-black/80 ${borderColor} relative flex flex-col items-center gap-4`}>
           <p className={`text-[10px] font-mono ${
               isRecycleView ? 'text-emerald-900' : (isDeleteMode ? 'text-red-900' : 'text-green-900')
           }`}>
@@ -335,6 +471,11 @@ const PasswordVault: React.FC<PasswordVaultProps> = ({
                 : (isDeleteMode ? 'SYSTEM_STATUS: PURGE_READY' : 'ENCRYPTED_STORAGE_VOLUME_01 // READ_ONLY')
             }
           </p>
+          
+          {/* Embedded Firewall Guard - Bottom Right */}
+          <div className="w-full flex justify-end">
+            <FirewallGuard className="w-auto" />
+          </div>
         </div>
       </div>
     </div>

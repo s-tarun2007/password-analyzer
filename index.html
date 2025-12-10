@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -39,6 +40,7 @@
         color: #22c55e; /* green-500 */
         overflow-x: hidden;
         min-height: 100%;
+        overscroll-behavior-y: none; /* Prevents pull-to-refresh bounce on mobile */
       }
 
       /* Custom Scrollbar for Cyber feel */
@@ -103,7 +105,9 @@
     "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.1/",
     "react/": "https://aistudiocdn.com/react@^19.2.1/",
     "@google/genai": "https://aistudiocdn.com/@google/genai@^1.31.0",
-    "recharts": "https://aistudiocdn.com/recharts@^3.5.1"
+    "recharts": "https://aistudiocdn.com/recharts@^3.5.1",
+    "jspdf": "https://esm.sh/jspdf@2.5.1",
+    "jspdf-autotable": "https://esm.sh/jspdf-autotable@3.8.2"
   }
 }
 </script>

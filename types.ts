@@ -29,6 +29,8 @@ export interface TerminalLine {
   timestamp: string;
 }
 
+export type InputModeType = 'text' | 'voice' | 'retina' | 'bio';
+
 export interface SavedPasswordEntry {
   id: string;
   password: string;
@@ -36,6 +38,8 @@ export interface SavedPasswordEntry {
   lastAccessedAt?: string;
   score?: number;
   description?: string;
+  type: InputModeType; // New field for classification
+  expiresAt?: string; // ISO Date string (YYYY-MM-DD)
 }
 
 export enum AnalysisState {
