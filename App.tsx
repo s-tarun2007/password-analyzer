@@ -25,16 +25,16 @@ import DeepFake from './components/views/DeepFake';
 import AdminControlPanel from './components/AdminControlPanel';
 import EvaAssistant from './components/EvaAssistant';
 
-// Optimized Matrix Rain component
+// Optimized Matrix Rain component with fewer elements for performance
 const MatrixRain = memo(() => (
-  <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-10">
-    {Array.from({ length: 10 }).map((_, i) => (
-        <div key={i} className="absolute text-green-500 text-xs transform-gpu" style={{ 
-            left: `${i * 10}%`, 
+  <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-10 select-none">
+    {Array.from({ length: 8 }).map((_, i) => (
+        <div key={i} className="absolute text-green-500 text-xs transform-gpu will-change-transform" style={{ 
+            left: `${i * 14}%`, 
             top: '-20px',
-            animation: `fall ${Math.random() * 2 + 1}s linear infinite` 
+            animation: `fall ${Math.random() * 3 + 2}s linear infinite` 
         }}>
-            {Math.random().toString(36).substring(2, 10)}
+            {Math.random().toString(36).substring(2, 8).toUpperCase()}
         </div>
     ))}
   </div>
@@ -332,22 +332,20 @@ const App: React.FC = () => {
   const handleNavigation = (viewId: string) => {
       if (viewId === activeView) return;
 
-      if (viewId === 'landing') {
-          setActiveView('landing');
-          setTransitionMode('none');
-          return;
-      }
-
-      // Set Transition Mode based on target view
+      // 1. Determine Loader
       if (viewId === 'password') setTransitionMode('password');
       else if (viewId === 'fraud-shield') setTransitionMode('fraud');
       else if (viewId === 'link-verifier') setTransitionMode('link');
       else if (viewId === 'deep-fake') setTransitionMode('deepfake');
+      else setTransitionMode('none');
+
+      // 2. Switch View Immediately (Behind loader)
+      setActiveView(viewId);
   };
 
-  const completeTransition = (targetView: string) => {
+  const onLoaderComplete = () => {
       setTransitionMode('none');
-      setActiveView(targetView);
+      // No need to set activeView here as it is already set
   };
 
   return (
@@ -368,20 +366,21 @@ const App: React.FC = () => {
         )}
 
         {/* Transition Loaders (Overlays) */}
+        {/* These sit on top of everything (z-200) so view switching behind them is invisible */}
         {transitionMode === 'password' && (
-             <PixelLockLoader onComplete={() => completeTransition('password')} />
+             <PixelLockLoader onComplete={onLoaderComplete} />
         )}
 
         {transitionMode === 'fraud' && (
-            <LoaderFraud onComplete={() => completeTransition('fraud-shield')} />
+            <LoaderFraud onComplete={onLoaderComplete} />
         )}
 
         {transitionMode === 'link' && (
-            <LoaderLink onComplete={() => completeTransition('link-verifier')} />
+            <LoaderLink onComplete={onLoaderComplete} />
         )}
 
         {transitionMode === 'deepfake' && (
-            <LoaderDeepFake onComplete={() => completeTransition('deep-fake')} />
+            <LoaderDeepFake onComplete={onLoaderComplete} />
         )}
         
         {/* Global AI Assistant */}
@@ -430,8 +429,8 @@ const App: React.FC = () => {
                 )}
 
                 {/* 4. TOOL VIEWS */}
-                {introFinished && activeView !== 'landing' && transitionMode === 'none' && (
-                  <div className="p-4 md:p-8 flex flex-col items-center justify-start relative z-10 max-w-6xl mx-auto animate-in fade-in duration-500 min-h-screen">
+                {introFinished && activeView !== 'landing' && (
+                  <div className="p-4 md:p-8 flex flex-col items-center justify-start relative z-10 max-w-6xl mx-auto animate-in fade-in duration-700 min-h-screen">
                     
                     {/* Header Toggle / Back Button (ALWAYS VISIBLE in tools) */}
                     <div className="absolute top-4 left-4 z-30">

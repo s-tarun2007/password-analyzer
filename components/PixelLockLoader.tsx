@@ -1,5 +1,5 @@
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 interface PixelLockLoaderProps {
   onComplete?: () => void;
@@ -7,181 +7,263 @@ interface PixelLockLoaderProps {
 
 const PixelLockLoader: React.FC<PixelLockLoaderProps> = ({ onComplete }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [statusText, setStatusText] = useState("INITIALIZING SECURITY LAYER...");
+  const [isFadingOut, setIsFadingOut] = useState(false);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { alpha: false }); // Optimize for no transparency on base
     if (!ctx) return;
 
-    // Handle high-dpi displays
-    const dpr = window.devicePixelRatio || 1;
+    // --- CONFIG ---
+    const isMobile = window.innerWidth < 768;
+    const particleCount = isMobile ? 800 : 1600; // Optimized count
+    const dpr = Math.min(window.devicePixelRatio || 1, 2); // Cap DPR at 2 for performance
+
+    // --- GEOMETRY CACHE ---
+    let lockPoints: {x: number, y: number}[] = [];
+    let clockFacePoints: {x: number, y: number}[] = [];
     
-    // Set explicit size matching window
-    canvas.width = window.innerWidth * dpr;
-    canvas.height = window.innerHeight * dpr;
-    ctx.scale(dpr, dpr);
-
-    const particles: any[] = [];
-    const particleCount = 800; // Increased density for enhanced look
-    const width = window.innerWidth;
-    const height = window.innerHeight;
-
-    // --- ENHANCED LOCK GEOMETRY (CENTERED) ---
-    const lockPoints: {x: number, y: number}[] = [];
-    
-    // Scale factor to make lock larger
-    const scale = 0.25; // 25% of screen width/height roughly
-    const cx = 0.5; // Center X (0-1)
-    const cy = 0.55; // Center Y (0-1) - slightly lower to balance with shackle
-
-    // Lock Body (Square) - Centered around cx, cy
-    const bodyW = scale; 
-    const bodyH = scale * 0.8; 
-    
-    const startX = cx - bodyW/2;
-    const startY = cy - bodyH/2;
-
-    // Create a dense grid of points for the body
-    for(let i=0; i<60; i++) {
-        for(let j=0; j<50; j++) {
-             // Only add edge points and some internal structure for "hologram" feel
-             if (i===0 || i===59 || j===0 || j===49 || (i%5===0 && j%5===0)) {
-                 lockPoints.push({
-                     x: startX + (i/60) * bodyW,
-                     y: startY + (j/50) * bodyH
-                 });
-             }
+    // Generate Static Geometries
+    const initGeometries = () => {
+        // LOCK
+        const lPoints = [];
+        const bodyW = 50, bodyH = 40, bodyY = 10;
+        // Body
+        for (let x = -bodyW/2; x <= bodyW/2; x += 2) {
+            for (let y = 0; y <= bodyH; y += 2) {
+                if (x <= -bodyW/2 + 2 || x >= bodyW/2 - 2 || y <= 0 || y >= bodyH - 2 || (x%6===0 && y%6===0)) {
+                    lPoints.push({ x, y: y + bodyY });
+                }
+            }
         }
-    }
+        // Shackle
+        const r = 20;
+        for (let a = Math.PI; a <= 2 * Math.PI; a += 0.1) {
+            lPoints.push({ x: Math.cos(a) * r, y: bodyY + Math.sin(a) * r * 1.2 });
+            lPoints.push({ x: Math.cos(a) * (r-5), y: bodyY + Math.sin(a) * (r-5) * 1.2 });
+        }
+        lockPoints = lPoints;
 
-    // Shackle (Arch)
-    const shackleRadius = bodyW * 0.35;
-    const shackleCenterY = startY; 
-    
-    for(let i=0; i<60; i++) {
-        const angle = Math.PI + (i/60) * Math.PI;
-        lockPoints.push({
-            x: cx + Math.cos(angle) * shackleRadius,
-            y: shackleCenterY + Math.sin(angle) * shackleRadius * 1.2
-        });
-        // Thicker shackle (inner ring)
-        lockPoints.push({
-            x: cx + Math.cos(angle) * (shackleRadius * 0.8),
-            y: shackleCenterY + Math.sin(angle) * (shackleRadius * 0.8) * 1.2
-        });
-    }
+        // CLOCK FACE
+        const cPoints = [];
+        const rad = 45;
+        for (let a = 0; a < Math.PI * 2; a += 0.05) {
+             cPoints.push({ x: Math.cos(a) * rad, y: Math.sin(a) * rad });
+        }
+        // Ticks
+        for (let i = 0; i < 12; i++) {
+            const a = (i / 12) * Math.PI * 2;
+            const x1 = Math.cos(a) * (rad - 5);
+            const y1 = Math.sin(a) * (rad - 5);
+            const x2 = Math.cos(a) * rad;
+            const y2 = Math.sin(a) * rad;
+            cPoints.push({ x: x1, y: y1 });
+            cPoints.push({ x: (x1+x2)/2, y: (y1+y2)/2 });
+            cPoints.push({ x: x2, y: y2 });
+        }
+        clockFacePoints = cPoints;
+    };
+    initGeometries();
 
-    // Initialize Particles at Bottom Left (Off-screen start or corner)
-    for (let i = 0; i < particleCount; i++) {
-      particles.push({
-        x: 0, 
-        y: height,
-        vx: (Math.random() * width * 0.015) + 2,
-        vy: -(Math.random() * height * 0.015) - 2,
-        size: Math.random() * 2 + 1,
+    // --- PARTICLE SYSTEM ---
+    // Using simple objects for readability, but keeping object creation out of render loop
+    const particles = new Array(particleCount).fill(0).map((_, i) => ({
+        x: Math.random() * window.innerWidth, 
+        y: window.innerHeight + Math.random() * 200, 
+        vx: (Math.random() - 0.5) * 2,
+        vy: -(Math.random() * 4 + 2), 
+        size: Math.random() * 2 + 0.5,
         color: '#22c55e',
-        targetIndex: Math.floor(Math.random() * lockPoints.length)
-      });
-    }
+        lockIndex: i % lockPoints.length,
+        clockFaceIndex: i % clockFacePoints.length,
+        isHand: Math.random() > 0.7, // 30% particles form hands
+        handOffset: Math.random() * 40,
+        angleOffset: Math.random() * Math.PI * 2,
+    }));
 
     let animationFrameId: number;
-    let startTime = Date.now();
-    const duration = 5000;
+    const startTime = Date.now();
+    const morphTime = 2500; 
+    const duration = 5000; 
+    
+    // Hand Geometry helper (Calculated per frame)
+    const getHandPos = (timeVal: number, p: any) => {
+         // Minute hand (fast)
+         const minAngle = timeVal * 0.2;
+         // Hour hand (slow)
+         const hourAngle = minAngle / 12;
+         
+         const isMinute = p.lockIndex % 2 === 0;
+         const angle = isMinute ? minAngle : hourAngle;
+         const length = isMinute ? 38 : 25;
+         
+         // Spread particles along the hand line
+         const r = (p.handOffset % length);
+         return {
+             x: Math.cos(angle) * r,
+             y: Math.sin(angle) * r
+         };
+    };
 
+    const resize = () => {
+        canvas.width = window.innerWidth * dpr;
+        canvas.height = window.innerHeight * dpr;
+        ctx.scale(dpr, dpr);
+    };
+    window.addEventListener('resize', resize);
+    resize();
+
+    // --- RENDER LOOP ---
     const render = () => {
-      const elapsed = Date.now() - startTime;
+      const now = Date.now();
+      const elapsed = now - startTime;
       
-      // Trail effect
-      ctx.fillStyle = 'rgba(2, 6, 23, 0.25)'; 
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      const cx = width / 2;
+      const cy = height / 2;
+      const minDim = Math.min(width, height);
+      const scale = minDim * 0.0035; 
+
+      // Fade Background
+      ctx.fillStyle = 'rgba(2, 6, 23, 0.3)'; 
       ctx.fillRect(0, 0, width, height);
 
-      particles.forEach(p => {
-        if (elapsed < 2000) {
-            // Phase 1: Splitter from Bottom Left Corner to Top Right
-            // Move in a diagonal wave
-            p.x += p.vx;
-            p.y += p.vy;
-            p.x += Math.sin(p.y * 0.02) * 3; // Wavy motion
-            
-            // If out of bounds, reset slightly to keep flow
-            if(p.x > width || p.y < 0) {
-                p.x = 0;
-                p.y = height;
-            }
-        } else {
-            // Phase 2: Form Lock
-            const targetRel = lockPoints[p.targetIndex];
-            const tx = targetRel.x * width; 
-            const ty = targetRel.y * height;
-            
-            // Ease into position
-            const dx = tx - p.x;
-            const dy = ty - p.y;
-            
-            p.x += dx * 0.08;
-            p.y += dy * 0.08;
-            
-            // Color shift: Green -> White -> Gold/Green
-            if (elapsed > 4000) {
-                 p.color = '#ffffff'; // Flash white before unlock
+      let phase = 'LOCK';
+      if (elapsed > morphTime) phase = 'CLOCK';
+      if (elapsed > duration - 800) phase = 'EXIT';
+
+      // Update Text State (throttled by logic)
+      if (elapsed < 1500) {
+          if (statusText !== "ENCRYPTING CHANNEL...") setStatusText("ENCRYPTING CHANNEL...");
+      } else if (elapsed < morphTime) {
+           if (statusText !== "LOCKING SECURE GEOMETRY...") setStatusText("LOCKING SECURE GEOMETRY...");
+      } else if (elapsed < duration - 1000) {
+           if (statusText !== "SYNCHRONIZING TIMESTAMPS...") setStatusText("SYNCHRONIZING TIMESTAMPS...");
+      } else {
+           if (statusText !== "ACCESS GRANTED") setStatusText("ACCESS GRANTED");
+      }
+
+      // Pre-calc visual offset multiplier
+      const geomScale = scale * 40;
+
+      particles.forEach((p, i) => {
+        let tx = p.x;
+        let ty = p.y;
+        let tColor = '#22c55e';
+
+        if (phase === 'LOCK') {
+            // Intro Animation
+            if (elapsed < 1200) {
+                 p.x += p.vx;
+                 p.y += p.vy;
+                 // Reset if offscreen
+                 if (p.y < -50) { p.y = height + 50; p.x = Math.random() * width; }
             } else {
-                 p.color = '#22c55e';
+                // Form Lock
+                const pt = lockPoints[p.lockIndex];
+                tx = cx + pt.x * geomScale;
+                ty = cy + pt.y * geomScale;
+                // Easing
+                p.x += (tx - p.x) * 0.12;
+                p.y += (ty - p.y) * 0.12;
+                
+                if (Math.abs(tx - p.x) < 2) tColor = '#4ade80'; 
             }
+        } 
+        else if (phase === 'CLOCK') {
+            if (p.isHand) {
+                // Hand Particles
+                const handPos = getHandPos((elapsed - morphTime) * 0.1, p);
+                tx = cx + handPos.x * geomScale;
+                ty = cy + handPos.y * geomScale;
+                tColor = '#ffffff';
+            } else {
+                // Face Particles
+                const pt = clockFacePoints[p.clockFaceIndex];
+                tx = cx + pt.x * geomScale;
+                ty = cy + pt.y * geomScale;
+                tColor = '#06b6d4'; // Cyan
+            }
+
+            // Swirl transition into clock
+            if (elapsed < morphTime + 600) {
+                // Spiral Movement
+                 const angle = Math.atan2(p.y - cy, p.x - cx) + 0.15;
+                 const dist = Math.sqrt((p.x-cx)**2 + (p.y-cy)**2);
+                 const targetDist = Math.sqrt((tx-cx)**2 + (ty-cy)**2);
+                 const d = dist + (targetDist - dist) * 0.1;
+                 
+                 p.x = cx + Math.cos(angle) * d;
+                 p.y = cy + Math.sin(angle) * d;
+            } else {
+                 p.x += (tx - p.x) * 0.2;
+                 p.y += (ty - p.y) * 0.2;
+            }
+        } 
+        else if (phase === 'EXIT') {
+            // Explosion / Expansion
+            const angle = Math.atan2(p.y - cy, p.x - cx);
+            const dist = Math.sqrt((p.x-cx)**2 + (p.y-cy)**2);
+            
+            p.x += Math.cos(angle) * (dist * 0.1 + 10);
+            p.y += Math.sin(angle) * (dist * 0.1 + 10);
+            tColor = '#ffffff';
+            p.size *= 1.02; // Grow slightly
         }
 
-        ctx.fillStyle = p.color;
+        ctx.fillStyle = tColor;
         ctx.fillRect(p.x, p.y, p.size, p.size);
       });
 
-      // Enhanced Keyhole Visual (Center of Lock Body)
-      if (elapsed > 2500) {
-          const alpha = Math.min(1, (elapsed - 2500) / 1000);
-          ctx.globalAlpha = alpha;
-          
-          const keyholeX = width * cx;
-          const keyholeY = height * (cy + 0.02);
-          
-          // Glow
-          const grad = ctx.createRadialGradient(keyholeX, keyholeY, 5, keyholeX, keyholeY, 40);
-          grad.addColorStop(0, 'rgba(34, 197, 94, 0.8)');
-          grad.addColorStop(1, 'transparent');
-          ctx.fillStyle = grad;
+      // Glow overlay for Clock Phase
+      if (phase === 'CLOCK') {
+          ctx.shadowBlur = 20;
+          ctx.shadowColor = '#06b6d4';
+          ctx.globalCompositeOperation = 'lighter';
+          // Draw a faint ring
+          ctx.strokeStyle = 'rgba(6, 182, 212, 0.1)';
+          ctx.lineWidth = 2;
           ctx.beginPath();
-          ctx.arc(keyholeX, keyholeY, 40, 0, Math.PI*2);
-          ctx.fill();
-
-          // Solid Shape
-          ctx.fillStyle = '#10b981';
-          ctx.beginPath();
-          ctx.arc(keyholeX, keyholeY - 10, 15, 0, Math.PI*2); // Top circle
-          ctx.fill();
-          ctx.beginPath();
-          ctx.moveTo(keyholeX, keyholeY - 10);
-          ctx.lineTo(keyholeX + 10, keyholeY + 25);
-          ctx.lineTo(keyholeX - 10, keyholeY + 25);
-          ctx.fill();
-          
-          ctx.globalAlpha = 1;
+          ctx.arc(cx, cy, 45 * geomScale, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.globalCompositeOperation = 'source-over';
+          ctx.shadowBlur = 0;
       }
 
       if (elapsed < duration) {
-        animationFrameId = requestAnimationFrame(render);
+          animationFrameId = requestAnimationFrame(render);
       } else {
-          if (onComplete) onComplete();
+          // Trigger CSS Fade out
+          setIsFadingOut(true);
+          setTimeout(() => {
+              if (onComplete) onComplete();
+          }, 600); // Match CSS duration
       }
     };
 
     render();
 
-    return () => cancelAnimationFrame(animationFrameId);
+    return () => {
+        window.removeEventListener('resize', resize);
+        cancelAnimationFrame(animationFrameId);
+    };
   }, [onComplete]);
 
   return (
-    <div className="fixed inset-0 z-[200] bg-slate-950 flex items-center justify-center">
-      <canvas ref={canvasRef} className="absolute inset-0 z-10" />
-      <div className="absolute bottom-16 text-green-500 font-mono text-sm tracking-[0.5em] animate-pulse z-20 w-full text-center">
-        ENCRYPTING SECURE CHANNEL...
+    <div className={`fixed inset-0 z-[200] bg-slate-950 flex items-center justify-center transition-opacity duration-700 ${isFadingOut ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
+      <canvas ref={canvasRef} className="absolute inset-0 z-10 block" />
+      <div className={`absolute bottom-16 w-full text-center z-20 transition-opacity duration-300 ${isFadingOut ? 'opacity-0' : 'opacity-100'}`}>
+        <p className="font-mono text-sm tracking-[0.5em] animate-pulse transition-colors duration-500" 
+           style={{ color: statusText.includes('SYNCHRONIZING') ? '#06b6d4' : '#22c55e' }}>
+            {statusText}
+        </p>
+      </div>
+      {/* Visual Timer Bar */}
+      <div className={`absolute bottom-12 w-64 h-1 bg-gray-800 rounded-full overflow-hidden z-20 transition-opacity duration-300 ${isFadingOut ? 'opacity-0' : 'opacity-100'}`}>
+          <div className="h-full bg-gradient-to-r from-green-500 to-cyan-500 animate-[loading_5s_linear_forwards]"></div>
       </div>
     </div>
   );
